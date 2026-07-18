@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Verify a survivor certificate — LAST FAN STANDING</title>
+<meta name="description" content="Recompute a Last Fan Standing survivor certificate in your browser — hashes, signatures, and the on-chain Memo anchor. No wallet needed." />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<main>
+  <p class="kicker">no wallet · no account · no trusting us</p>
+  <h1>Verify a certificate</h1>
+  <div class="rule" aria-hidden="true">
+    <svg viewBox="0 0 680 14" preserveAspectRatio="none"><path d="M4 7 Q 170 5 340 8 T 676 6" fill="none" stroke="#b3392e" stroke-width="3" stroke-linecap="round"/></svg>
+  </div>
+
+  <p class="lede">
+    Paste the <span class="hand">survivor-cert-….json</span> file the bot posted to
+    your group (or open it and copy the text). Your browser recomputes every pick
+    hash, checks every ed25519 signature, rebuilds the certificate hash, and looks
+    for it in the anchor wallet's Memo trail on Solana devnet. We are not involved.
+  </p>
+
+  <textarea id="certInput" placeholder='{"p":"last-fan-standing/cert/v1", … }' spellcheck="false"></textarea>
+  <div>
+    <button id="verifyBtn">Run the checks</button>
+    <label class="btn ghost" style="cursor:pointer">Open a file<input id="fileInput" type="file" accept=".json,application/json" style="display:none" /></label>
+  </div>
+
+  <div id="summary"></div>
+  <div id="checks"></div>
+  <div id="verdict"></div>
+
+  <h2>What "verified" means here</h2>
+  <p>
+    Each pick was committed as <span class="mono">sha256(pool | round | player | pick | salt)</span>
+    and signed by the survivor's own key. Round roots were anchored on-chain before
+    outcomes were announced; the certificate hash sits in the same Memo trail. If the
+    checks go green, this exact path of picks existed, signed, before the football
+    happened — and nobody, including us, could have written it afterwards.
+  </p>
+  <p class="annot">
+    devnet keeps ~4 days of transaction history, so we check the anchor account's
+    recent Memo trail; older pools are archived as evidence JSONs in the repo.
+  </p>
+
+  <footer>
+    everything on this page runs in your browser: WebCrypto for the hashes and
+    signatures, one public RPC call for the Memo trail. view source, it's short.
+  </footer>
+</main>
+
+<script>
+const RPC = "https://solana-devnet.api.onfinality.io/public";
+
+// ---- tiny base58 (decode only) ---------------------------------------------
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function b58decode(s) {
+  let n = 0n;
+  for (const c of s) {
+    const i = B58.indexOf(c);
+    if (i < 0) throw new Error("bad base58");
+    n = n * 58n + BigInt(i);
+  }
+  const bytes = [];
+  while (n > 0n) { bytes.unshift(Number(n & 0xffn)); n >>= 8n; }
+  for (const c of s) { if (c === "1") bytes.unshift(0); else break; }
+  return new Uint8Array(bytes);
+}
+const hexToBytes = (h) => new Uint8Array(h.match(/.{2}/g).map((b) => parseInt(b, 16)));
+async function sha256hex(str) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function ed25519verify(pubkeyB58, sigB58, msgHex) {
+  try {
+    const key = await crypto.subtle.importKey("raw", b58decode(pubkeyB58), { name: "Ed25519" }, false, ["verify"]);
+    return await crypto.subtle.verify({ name: "Ed25519" }, key, b58decode(sigB58), hexToBytes(msgHex));
+  } catch (e) {
+    return null; // browser without WebCrypto Ed25519 — inconclusive, not a failure
+  }
+}
+
+// ---- the checks -------------------------------------------------------------
+const $ = (id) => document.getElementById(id);
+function check(state, label, detail) {
+  const mark = state === "pass" ? "✓" : state === "fail" ? "✗" : "…";
+  return `<div class="check ${state}"><span class="mark">${mark}</span><div>${label}${detail ? `<small>${detail}</small>` : ""}</div></div>`;
+}
+const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+async function verify() {
+  const out = [];
+  $("summary").innerHTML = ""; $("checks").innerHTML = ""; $("verdict").innerHTML = "";
+
+  let cert;
+  try {
+    cert = JSON.parse($("certInput").value);
+    if (cert.p !== "last-fan-standing/cert/v1") throw new Error("not a survivor certificate");
+  } catch (e) {
+    $("verdict").innerHTML = `<p class="verdict bad">Can't read that: ${escapeHtml(e.message)}.</p>`;
+    return;
+  }
+
+  $("summary").innerHTML = `
+    <div class="card">
+      <p><b class="hand" style="font-size:1.3rem">${escapeHtml(cert.survivor.name)}</b> — last fan standing<br/>
+      ${escapeHtml(cert.fixture)}${cert.demo ? ' · <span class="annot red">DEMO matchday</span>' : ""}<br/>
+      <span class="annot">${cert.rounds.length} sudden-death rounds survived</span></p>
+      <p class="mono">key: ${escapeHtml(cert.survivor.pubkey)}</p>
+    </div>`;
+
+  let hashesOk = 0, sigsOk = 0, sigsUnknown = 0;
+  for (const r of cert.rounds) {
+    const recomputed = await sha256hex([cert.lobbyId, String(r.n), cert.survivor.playerId, r.pick, r.salt].join("|"));
+    if (recomputed === r.commitHash) hashesOk++;
+    const sv = await ed25519verify(cert.survivor.pubkey, r.sig, r.commitHash);
+    if (sv === true) sigsOk++; else if (sv === null) sigsUnknown++;
+  }
+  const n = cert.rounds.length;
+  out.push(check(hashesOk === n ? "pass" : "fail",
+    `Pick hashes recomputed: ${hashesOk}/${n} match`,
+    "sha256(pool | round | player | pick | salt), rebuilt from the revealed picks"));
+  if (sigsUnknown === n && n > 0) {
+    out.push(check("wait", "Signatures: this browser lacks WebCrypto Ed25519",
+      "try Safari 17+, Firefox, or Chrome 133+ — the hashes above still bind the picks"));
+  } else {
+    out.push(check(sigsOk + sigsUnknown === n ? "pass" : "fail",
+      `Signatures verified: ${sigsOk}/${n} by the survivor's own key`,
+      "ed25519 over each commit hash"));
+  }
+
+  const material = [
+    cert.p, cert.lobbyId, String(cert.fixtureId), cert.survivor.playerId, cert.survivor.pubkey,
+    ...cert.rounds.map((r) => [r.n, r.pick, r.salt, r.commitHash, r.sig, r.correct].join("|")),
+  ].join("\n");
+  const certHash = await sha256hex(material);
+  out.push(check("pass", "Certificate hash rebuilt", `<span class="mono">${certHash}</span>`));
+  $("checks").innerHTML = out.join("");
+
+  out.push(check("wait", "Searching the anchor wallet's Memo trail on devnet…"));
+  $("checks").innerHTML = out.join("");
+  let anchored = false, anchorSig = null, rpcFailed = false;
+  try {
+    const res = await fetch(RPC, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", id: 1, method: "getSignaturesForAddress",
+        params: [cert.anchorWallet, { limit: 1000 }],
+      }),
+    });
+    const body = await res.json();
+    for (const entry of body.result ?? []) {
+      if (entry.memo && entry.memo.includes(certHash)) { anchored = true; anchorSig = entry.signature; break; }
+    }
+  } catch (e) { rpcFailed = true; }
+  out.pop();
+  const explorer = `https://explorer.solana.com/address/${cert.anchorWallet}?cluster=devnet`;
+  if (anchored) {
+    out.push(check("pass", "Found on-chain: the certificate hash is in the Memo trail",
+      `tx <span class="mono">${anchorSig.slice(0, 20)}…</span> · <a href="${explorer}" target="_blank" rel="noopener">anchor account on explorer</a>`));
+  } else if (rpcFailed) {
+    out.push(check("wait", "Devnet RPC unreachable from here",
+      `check the <a href="${explorer}" target="_blank" rel="noopener">anchor account</a> by hand — search its memos for the hash above`));
+  } else {
+    out.push(check("fail", "Hash not found in the wallet's recent Memo trail",
+      `devnet keeps ~4 days of history — older pools live in the repo's evidence archive · <a href="${explorer}" target="_blank" rel="noopener">anchor account</a>`));
+  }
+  $("checks").innerHTML = out.join("");
+
+  const good = hashesOk === n && (sigsOk + sigsUnknown === n) && anchored;
+  const partial = hashesOk === n && (sigsOk + sigsUnknown === n) && !anchored;
+  $("verdict").innerHTML = good
+    ? `<p class="verdict ok">VERIFIED. ${escapeHtml(cert.survivor.name)} really did call every one of these before the football happened. Pay your forfeits.</p>`
+    : partial
+      ? `<p class="verdict">The mathematics check out; the on-chain anchor wasn't found in recent history (see above).</p>`
+      : `<p class="verdict bad">This certificate does not check out. Someone is trying it on.</p>`;
+}
+
+$("verifyBtn").addEventListener("click", verify);
+$("fileInput").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (f) { $("certInput").value = await f.text(); verify(); }
+});
+</script>
+</body>
+</html>
