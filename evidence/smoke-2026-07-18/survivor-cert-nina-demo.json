@@ -1,0 +1,42 @@
+{
+  "p": "last-fan-standing/cert/v1",
+  "lobbyId": "4eb96ae4",
+  "fixtureId": 99022018,
+  "fixture": "Argentina v France",
+  "demo": true,
+  "survivor": {
+    "name": "Nina (demo)",
+    "pubkey": "5JnzFm6gHDMMAqgrNNCZ23RsAza5tZdWWorQSwdvsZmS",
+    "playerId": "4eb96ae4:-102"
+  },
+  "rounds": [
+    {
+      "n": 1,
+      "trigger": "kickoff",
+      "question": "Opening question. First goal before 25' — who scores it?",
+      "pick": "home",
+      "pickLabel": "Argentina",
+      "salt": "2ff3738587e864b2",
+      "commitHash": "2639b217693a8c280d9d9fc8436724fc15599f03cdc2911e1a5c22f36f4cf7a8",
+      "sig": "3ePUZinUi6y8kGmACyQfHNy7ykc3Kv9nrgsN364sPXnn99WMXc7kp4cMZ68Fjaok8dvpyuCuRJ7vqbV5YbyWZAqS",
+      "correct": "home",
+      "merkleRoot": "d2bcc66eb2e27ff7c78c9d8cc1bc92acb532aa1c7753e261361caf50ec5f50af",
+      "memoSig": "vhES4SiUbd8D5fKPM1L3TEgd33DUgMMqD8LDFc4HU3a8utJXJuurTWGvtkJ4dogy6mZ3juc6XCnjaPkCjdBthiA"
+    },
+    {
+      "n": 2,
+      "trigger": "goal",
+      "question": "Argentina 1–0 France. Next goal before 43' — who gets it?",
+      "pick": "home",
+      "pickLabel": "Argentina",
+      "salt": "21d6ff64ff8c99f3",
+      "commitHash": "99dc28de6dfd8d95a7fa3cfc63fb5a07f980ef2bf5017ae42764d255a33889b5",
+      "sig": "3K19NjRfmVBve23TMZn2Z1QuSqhQxJn9bn3JBzjnQAwnNFetbmxGmRqeq5gKU683PLDXPsSQR1AUfimEbaPvcL3d",
+      "correct": "home",
+      "merkleRoot": "bc2f3b347a8d682839be09bdf3ab1a22416b96461a96d720990aa0de5bef314e",
+      "memoSig": "36Y3P3ADqNeFPNPxU5pmJWfYmAHGR8TfCYkmm7y3TqxDhcEmrBEV1opoQCki9aRPA5HPaEWiWAHkRxue54vkKm7T"
+    }
+  ],
+  "anchorWallet": "AHs1Q6z9VRBnS3gq13tHTnXGk85Qfyk1MjgBE5rKQ8yi",
+  "issuedAt": 1784416164402
+}

@@ -549,7 +549,7 @@ export class Engine {
 
     const doc = new InputFile(
       Buffer.from(JSON.stringify(cert, null, 2), "utf8"),
-      `survivor-cert-${lobby.id}-${winner.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.json`
+      `survivor-cert-${lobby.id}-${winner.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}.json`
     );
     try {
       await this.bot.api.sendDocument(lobby.chatId, doc, {
