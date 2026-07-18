@@ -490,6 +490,17 @@ export class Engine {
   }
 
   async issueCert(lobby: LobbyRow, winner: PlayerRow): Promise<SurvivorCert | undefined> {
+    // Re-sends (e.g. /receipt) reuse the stored certificate and its anchor —
+    // a certificate is anchored exactly once.
+    const existing = await db.query.certs.findFirst({
+      where: and(eq(certs.lobbyId, lobby.id), eq(certs.playerId, winner.id)),
+    });
+    if (existing) {
+      const cert = JSON.parse(existing.certJson) as SurvivorCert;
+      await this.sendCertDocument(lobby, winner, cert, existing.certHash, existing.memoSig);
+      return cert;
+    }
+
     const allRounds = (await db.query.rounds.findMany({ where: eq(rounds.lobbyId, lobby.id) })).sort(
       (a, b) => a.n - b.n
     );
@@ -547,6 +558,17 @@ export class Engine {
       })
       .onConflictDoNothing();
 
+    await this.sendCertDocument(lobby, winner, cert, hash, memoSig);
+    return cert;
+  }
+
+  private async sendCertDocument(
+    lobby: LobbyRow,
+    winner: PlayerRow,
+    cert: SurvivorCert,
+    hash: string,
+    memoSig: string | null
+  ): Promise<void> {
     const doc = new InputFile(
       Buffer.from(JSON.stringify(cert, null, 2), "utf8"),
       `survivor-cert-${lobby.id}-${winner.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}.json`
@@ -563,7 +585,6 @@ export class Engine {
     } catch (e) {
       console.error("[engine] cert document send failed:", (e as Error).message?.slice(0, 160));
     }
-    return cert;
   }
 
   // -- forfeit contract -----------------------------------------------------
