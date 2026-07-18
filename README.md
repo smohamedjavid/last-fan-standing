@@ -7,6 +7,10 @@ Telegram-native. No wallet, no app, no money ever. Just sudden-death picks on
 live match events, tombstones for the fallen, one certificate for the survivor,
 and one notarized forfeit for the first fan out.
 
+Live at [lastfanstanding.vercel.app](https://lastfanstanding.vercel.app) —
+product page plus the no-wallet certificate verifier. Deep-dive for the
+curious: [TECHNICAL.md](TECHNICAL.md).
+
 ## The 90-minute loop
 
 1. **`/royale`** in your group opens a pool on the next fixture. One tap to
@@ -78,7 +82,8 @@ one public RPC call. No wallet, no account, no trusting us.
    anchors → eliminations → funerals → a kiricocho kill → survivor certificate
    → forfeit vote. The football is scripted; the cryptography is not.
 2. Take the `survivor-cert-….json` the bot posts and paste it into
-   `web/verify.html` (open it locally or from the hosted page). Watch your own
+   [the verify page](https://lastfanstanding.vercel.app/verify.html)
+   (`web/verify.html` — hosted or opened locally, same file). Watch your own
    browser recompute the hashes and find the anchor on devnet.
 3. Anchor account: the wallet printed by the service at boot —
    [explorer link in evidence/](evidence/).
