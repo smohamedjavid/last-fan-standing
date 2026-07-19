@@ -108,7 +108,7 @@ last-fan-standing/
 │   │   ├── demo.ts          the scripted 3-minute matchday
 │   │   └── api.ts           read API for the verify page
 │   ├── scripts/smoke.ts     E2E: demo vs real devnet + evidence archiving
-│   └── test/                36 tests, fork-isolated vitest
+│   └── test/                43 tests, fork-isolated vitest
 ├── web/                static product page + no-wallet certificate verifier
 └── evidence/           archived Memo transactions from real runs
 ```

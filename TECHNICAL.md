@@ -6,7 +6,7 @@ cites real files. Where something is custodial or approximated, it says so.
 
 Live: [lastfanstanding.vercel.app](https://lastfanstanding.vercel.app) ·
 anchor wallet [`AHs1Q6z9VRBnS3gq13tHTnXGk85Qfyk1MjgBE5rKQ8yi`](https://explorer.solana.com/address/AHs1Q6z9VRBnS3gq13tHTnXGk85Qfyk1MjgBE5rKQ8yi?cluster=devnet) ·
-36 tests (`npm test`) · real devnet evidence in `evidence/smoke-2026-07-18/`.
+43 tests (`npm test`) · real devnet evidence in `evidence/smoke-2026-07-18/`.
 
 ## Design rule: pure core, dumb shell
 
