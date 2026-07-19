@@ -32,6 +32,7 @@ import {
   Pundit,
 } from "./pundit.js";
 import { renderWallChart, renderTombstoneCard, type ChartData } from "./wallchart.js";
+import { buildReel, type ReelState } from "./graveyard-reel.js";
 
 /** Round 1 forgives silence — people are still finding their thumbs. */
 const GRACE_ROUND_1 = true;
@@ -480,6 +481,9 @@ export class Engine {
         `Nobody survived. The pool ends the way most group-chat confidence does: a wall of tombstones. The chart is the only winner.`
       );
     }
+    // Live matches post the full-time recap here, the moment the whistle blows.
+    // Demo lobbies defer to their scripted finale so the run ends on the reel.
+    if (!lobby.demo) await this.postGraveyardReel(lobbyId);
     await this.postWallChart(lobbyId, true);
     await this.startForfeitVote(lobbyId);
   }
@@ -717,6 +721,70 @@ export class Engine {
         };
       }),
     };
+  }
+
+  /** Snapshot the pool for the graveyard reel — pure data, no rendering. */
+  async reelState(lobbyId: string): Promise<ReelState> {
+    const lobby = (await db.query.lobbies.findFirst({ where: eq(lobbies.id, lobbyId) }))!;
+    const roster = await this.playersOf(lobbyId);
+    const allJinxes = await db.query.jinxes.findMany({ where: eq(jinxes.lobbyId, lobbyId) });
+    const byId = new Map(roster.map((p) => [p.id, p]));
+
+    const winners = roster.filter((p) => lobby.state === "finished" && p.alive);
+    let survivorCert: ReelState["survivorCert"];
+    if (winners.length > 0) {
+      const certRows = await db.query.certs.findMany({ where: eq(certs.lobbyId, lobbyId) });
+      const firstCert = certRows.find((c) => c.playerId === winners[0].id) ?? certRows[0];
+      survivorCert = {
+        names: winners.map((w) => w.name),
+        anchorWallet: this.memo?.wallet,
+        certHashPrefix: firstCert?.certHash?.slice(0, 16),
+        anchored: firstCert?.memoSig != null,
+      };
+    }
+
+    return {
+      fixture: `${lobby.home} v ${lobby.away}`,
+      lobbyId: lobby.id,
+      demo: lobby.demo,
+      totalRounds: lobby.roundNo,
+      players: roster.map((p) => ({
+        id: p.id,
+        name: p.name,
+        alive: p.alive,
+        diedRound: p.diedRound ?? undefined,
+        diedMinute: p.diedMinute ?? undefined,
+        fatalPick: p.fatalPick ?? undefined,
+        isWinner: lobby.state === "finished" && p.alive,
+      })),
+      jinxes: allJinxes.map((jx) => ({
+        jinxerName: byId.get(jx.jinxerId)?.name ?? jx.jinxerId,
+        targetName: byId.get(jx.targetId)?.name ?? jx.targetId,
+        roundN: jx.roundN,
+        landed: jx.credited,
+      })),
+      survivorCert,
+    };
+  }
+
+  /**
+   * Post the full-time graveyard reel — exactly once. The persisted
+   * `reel_posted` flag is the guard: it flips before the send so a race (or a
+   * second caller) can never double-post. Returns true only for the post that
+   * actually fired.
+   */
+  async postGraveyardReel(lobbyId: string): Promise<boolean> {
+    const lobby = await db.query.lobbies.findFirst({ where: eq(lobbies.id, lobbyId) });
+    if (!lobby || lobby.reelPosted) return false;
+    await db.update(lobbies).set({ reelPosted: true }).where(eq(lobbies.id, lobbyId));
+    try {
+      const reel = buildReel(await this.reelState(lobbyId));
+      await this.sendPhoto(lobby, lobby.roundNo, reel.imageBuffer, reel.caption);
+      return true;
+    } catch (e) {
+      console.error("[engine] graveyard reel failed:", (e as Error).message?.slice(0, 160));
+      return false;
+    }
   }
 
   async postWallChart(lobbyId: string, keepsake = false): Promise<void> {

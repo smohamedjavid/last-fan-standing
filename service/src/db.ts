@@ -47,6 +47,7 @@ export async function migrate(): Promise<void> {
       winner_player_id TEXT, first_out_player_id TEXT,
       forfeit_template TEXT, forfeit_memo_sig TEXT,
       forfeit_state TEXT NOT NULL DEFAULT 'none',
+      reel_posted INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS players (
@@ -95,6 +96,7 @@ export async function migrate(): Promise<void> {
   // Additive migrations for databases created before these columns existed.
   await addColumnIfMissing("players", "scripted", "INTEGER NOT NULL DEFAULT 0");
   await addColumnIfMissing("lobbies", "forfeit_memo_sig", "TEXT");
+  await addColumnIfMissing("lobbies", "reel_posted", "INTEGER NOT NULL DEFAULT 0");
 }
 
 async function addColumnIfMissing(table: string, column: string, type: string): Promise<void> {

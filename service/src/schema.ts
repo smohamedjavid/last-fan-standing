@@ -23,6 +23,8 @@ export const lobbies = sqliteTable("lobbies", {
   forfeitMemoSig: text("forfeit_memo_sig"),
   /** none | voting | chosen | proofed */
   forfeitState: text("forfeit_state").notNull().default("none"),
+  /** guards the full-time graveyard reel so it is posted exactly once */
+  reelPosted: integer("reel_posted", { mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at").notNull(),
 });
 

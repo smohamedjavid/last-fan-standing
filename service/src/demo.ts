@@ -203,6 +203,10 @@ export async function runDemo(
       `Grab the certificate file above and check it yourself in the verify page — no wallet needed.\n\n` +
       `On a real matchday, rounds fire on the live TxLINE feed instead of a script. Same keys, same anchors, same funerals.`
   );
+  await sleep(1500);
+
+  // The finale: one full-time card with every death, every jinx, the crown.
+  await engine.postGraveyardReel(lobby.id);
 }
 
 export async function demoRunningIn(chatId: number): Promise<boolean> {

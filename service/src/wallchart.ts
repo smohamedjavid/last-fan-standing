@@ -235,3 +235,230 @@ export function tombstoneCardSvg(opts: {
 export function renderTombstoneCard(opts: Parameters<typeof tombstoneCardSvg>[0]): Buffer {
   return toPng(tombstoneCardSvg(opts), 840);
 }
+
+// --- graveyard reel ---------------------------------------------------------
+//
+// The full-time recap: one tall funeral programme. Every fallen fan gets a
+// tombstone in the order they went, their fatal pick, and a graveside roast.
+// The kiricocho jinxes are tallied, and the sole survivor is crowned with the
+// certificate line. Same ink, same paper, same wobble as the wall chart — this
+// is the artifact the group screenshots when the whistle blows.
+
+export interface ReelTomb {
+  name: string;
+  round: number;
+  minute: number;
+  /** the fatal pick's label; undefined means they went silent */
+  fatalPick?: string;
+  /** one-line graveside roast in the pundit's template voice */
+  roast: string;
+  /** the jinxer whose kiricocho landed on them, if any */
+  jinxedBy?: string;
+}
+
+export interface ReelCardData {
+  fixture: string;
+  lobbyId: string;
+  demo: boolean;
+  totalRounds: number;
+  /** tombstones, already sorted into death order by the caller */
+  tombs: ReelTomb[];
+  jinxes: Array<{ jinxer: string; target: string; round: number; landed: boolean }>;
+  /** survivor name(s); empty on a total wipeout */
+  survivors: string[];
+  /** short prefix of the survivor certificate hash */
+  certHashPrefix?: string;
+  /** whether the certificate is anchored in the Memo trail yet */
+  anchored: boolean;
+}
+
+/** Break a roast into at most `maxLines` lines of ~`maxChars`, eliding the rest. */
+function wrapWords(text: string, maxChars: number, maxLines: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let cur = "";
+  for (const w of words) {
+    if (cur.length === 0) cur = w;
+    else if (`${cur} ${w}`.length <= maxChars) cur += ` ${w}`;
+    else {
+      lines.push(cur);
+      cur = w;
+      if (lines.length === maxLines) break;
+    }
+  }
+  if (cur && lines.length < maxLines) lines.push(cur);
+  const used = lines.join(" ").length;
+  if (lines.length === maxLines && used < words.join(" ").length) {
+    lines[maxLines - 1] = lines[maxLines - 1].replace(/\s*\S*$/, "") + "…";
+  }
+  return lines.length ? lines : [""];
+}
+
+/** A crown, drawn by hand, base at `baseY`, peaks rising above it. */
+function handCrown(cx: number, baseY: number, w: number, r: () => number): string {
+  const h = w * 0.72;
+  const x = cx - w / 2;
+  const top = baseY - h;
+  return path(
+    `M ${x + j(r)} ${baseY + j(r)} ` +
+      `L ${x + j(r)} ${top + h * 0.35 + j(r)} ` +
+      `L ${x + w * 0.25 + j(r)} ${baseY - h * 0.2 + j(r)} ` +
+      `L ${x + w * 0.5 + j(r)} ${top + j(r)} ` +
+      `L ${x + w * 0.75 + j(r)} ${baseY - h * 0.2 + j(r)} ` +
+      `L ${x + w + j(r)} ${top + h * 0.35 + j(r)} ` +
+      `L ${x + w + j(r)} ${baseY + j(r)} Z`,
+    ACCENT,
+    3
+  );
+}
+
+export function graveyardReelSvg(data: ReelCardData): string {
+  const r = rng(`${data.lobbyId}:reel`);
+  const W = 760;
+  const LEFT = 40;
+
+  // Pre-measure every tomb block so the canvas height is exact.
+  const blocks = data.tombs.map((t) => {
+    const roastLines = wrapWords(t.roast, 66, 2);
+    const h = 74 + roastLines.length * 24 + (t.jinxedBy ? 22 : 0) + 14;
+    return { tomb: t, roastLines, h: Math.max(h, 92) };
+  });
+
+  const headTop = 210;
+  const tombsH = blocks.reduce((s, b) => s + b.h, 0);
+  const jinxH = data.jinxes.length ? 78 + data.jinxes.length * 30 : 0;
+  const boxH = 132;
+  const H = headTop + tombsH + jinxH + 24 + boxH + 64;
+
+  const parts: string[] = [paper(W, H, r)];
+
+  // masthead
+  parts.push(
+    `<text x="${LEFT}" y="66" font-size="46" fill="${INK}" font-family="Gochi Hand">THE GRAVEYARD REEL</text>`
+  );
+  parts.push(path(handLine(LEFT, 82, W - 210, 84, r), ACCENT, 3));
+  parts.push(
+    `<text x="${LEFT}" y="116" font-size="25" fill="${INK}" font-family="Patrick Hand">FULL TIME · ${esc(
+      data.fixture
+    )}${data.demo ? "  ·  DEMO" : ""}</text>`
+  );
+  const funerals = data.tombs.length;
+  parts.push(
+    `<text x="${LEFT}" y="146" font-size="19" fill="${FADED}" font-family="Caveat">${funerals} funeral${
+      funerals === 1 ? "" : "s"
+    } · ${data.totalRounds} round${
+      data.totalRounds === 1 ? "" : "s"
+    } · every pick signed &amp; anchored before the whistle</text>`
+  );
+  parts.push(
+    `<text x="${LEFT}" y="190" font-size="26" fill="${ACCENT}" font-family="Gochi Hand">THE FALLEN — in the order they went</text>`
+  );
+
+  // tombs, in death order
+  let y = headTop;
+  for (const b of blocks) {
+    const t = b.tomb;
+    parts.push(
+      `<path d="${tombstone(LEFT, y + 4, 54, 58, r)}" fill="#e7dcc6" stroke="${FADED}" stroke-width="2.4"/>`
+    );
+    parts.push(
+      `<text x="${LEFT + 27}" y="${y + 30}" font-size="17" fill="${FADED}" text-anchor="middle" font-family="Gochi Hand">R.I.P</text>`
+    );
+    parts.push(
+      `<text x="${LEFT + 27}" y="${y + 50}" font-size="15" fill="${FADED}" text-anchor="middle" font-family="Gochi Hand">R${t.round}</text>`
+    );
+    const nx = LEFT + 76;
+    parts.push(
+      `<text x="${nx}" y="${y + 32}" font-size="30" fill="${INK}" font-family="Patrick Hand" style="text-decoration:line-through">${esc(
+        t.name
+      )}</text>`
+    );
+    const cause = t.fatalPick
+      ? `died backing “${esc(t.fatalPick)}”, ${t.minute}'`
+      : `went silent, ${t.minute}'`;
+    parts.push(`<text x="${nx}" y="${y + 58}" font-size="19" fill="${FADED}" font-family="Caveat">${cause}</text>`);
+    let ry = y + 84;
+    for (const rl of b.roastLines) {
+      parts.push(`<text x="${nx}" y="${ry}" font-size="18" fill="#4a463f" font-family="Caveat">${esc(rl)}</text>`);
+      ry += 24;
+    }
+    if (t.jinxedBy) {
+      parts.push(
+        `<text x="${nx}" y="${ry}" font-size="17" fill="${ACCENT}" font-family="Caveat">† kiricocho — ${esc(
+          t.jinxedBy
+        )}</text>`
+      );
+    }
+    parts.push(path(handLine(LEFT, y + b.h - 8, W - 40, y + b.h - 6, r), FADED, 1));
+    y += b.h;
+  }
+
+  // kiricocho ledger
+  if (data.jinxes.length) {
+    y += 16;
+    parts.push(path(handLine(LEFT, y, W - 40, y + 2, r), INK, 1.4));
+    y += 32;
+    parts.push(
+      `<text x="${LEFT}" y="${y}" font-size="24" fill="${INK}" font-family="Gochi Hand">KIRICOCHO — the jinxes cast</text>`
+    );
+    y += 30;
+    for (const jx of data.jinxes) {
+      const color = jx.landed ? ACCENT : FADED;
+      const mark = jx.landed ? "†" : "·";
+      const verdict = jx.landed ? "landed" : "no effect";
+      parts.push(
+        `<text x="${LEFT}" y="${y}" font-size="20" fill="${color}" font-family="Caveat">${mark} ${esc(
+          jx.jinxer
+        )} cursed ${esc(jx.target)} (R${jx.round}) — ${verdict}</text>`
+      );
+      y += 30;
+    }
+  }
+
+  // the crown, or the wipeout
+  y += 24;
+  const boxX = LEFT;
+  const boxY = y;
+  const boxW = W - 80;
+  if (data.survivors.length) {
+    parts.push(path(handRect(boxX, boxY, boxW, boxH, r), ACCENT, 3));
+    parts.push(handCrown(boxX + 52, boxY + 34, 42, r));
+    const sole = data.survivors.length === 1;
+    parts.push(
+      `<text x="${boxX + 96}" y="${boxY + 42}" font-size="30" fill="${ACCENT}" font-family="Gochi Hand">${
+        sole ? "LAST FAN STANDING" : "CO-SURVIVORS"
+      }</text>`
+    );
+    parts.push(
+      `<text x="${boxX + 96}" y="${boxY + 78}" font-size="28" fill="${INK}" font-family="Patrick Hand">${esc(
+        data.survivors.join(", ")
+      )}</text>`
+    );
+    const certLine = data.certHashPrefix
+      ? `survivor certificate ${esc(data.certHashPrefix)}… ${
+          data.anchored ? "anchored on Solana devnet" : "issued"
+        }`
+      : `survivor certificate issued`;
+    parts.push(`<text x="${boxX + 96}" y="${boxY + 108}" font-size="18" fill="${FADED}" font-family="Caveat">${certLine}</text>`);
+  } else {
+    parts.push(path(handRect(boxX, boxY, boxW, boxH, r), INK, 3));
+    parts.push(
+      `<text x="${boxX + 30}" y="${boxY + 50}" font-size="30" fill="${INK}" font-family="Gochi Hand">NO SURVIVORS</text>`
+    );
+    parts.push(
+      `<text x="${boxX + 30}" y="${boxY + 88}" font-size="21" fill="${FADED}" font-family="Patrick Hand">total wipeout — the wall of stones is the only winner</text>`
+    );
+  }
+
+  parts.push(
+    `<text x="${LEFT}" y="${H - 26}" font-size="17" fill="${FADED}" font-family="Caveat">round roots + the survivor cert live in the Memo trail on Solana devnet · verify with no wallet</text>`
+  );
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${parts.join(
+    ""
+  )}</svg>`;
+}
+
+export function renderGraveyardReel(data: ReelCardData): Buffer {
+  return toPng(graveyardReelSvg(data), 1080);
+}
